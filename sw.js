@@ -1,8 +1,8 @@
 /* Cairn Web — offline cache. Bump VERSION when publishing a new build. */
-const VERSION = 'cairn-web-1.3.0';
+const VERSION = 'cairn-web-1.4.0';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'vendor/jszip.min.js', 'vendor/marked.min.js', 'vendor/purify.min.js',
-  'js/icons.js', 'js/util.js', 'js/store.js', 'js/model.js', 'js/ui.js', 'js/view-auth.js', 'js/view-projects.js',
+  'js/icons.js', 'js/util.js', 'js/store.js', 'js/model.js', 'js/ui.js', 'js/graph.js', 'js/rtf.js', 'js/view-auth.js', 'js/view-projects.js',
   'js/view-board.js', 'js/view-card.js', 'js/view-docs.js', 'js/view-roadmap.js', 'js/view-whiteboard.js', 'js/app.js',
   'assets/icon.png', 'assets/icon-192.png', 'assets/icon-512.png', 'assets/ionicons.zip'];
 self.addEventListener('install', e => e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));

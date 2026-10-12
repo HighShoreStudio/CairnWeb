@@ -176,6 +176,22 @@ const UI = {
     render(value);
     return wrap;
   },
+  /** Popover with a grid of colors (and "none" / "automatic" when noneLabel is given). */
+  colorMenu(anchor, colors, value, onPick, noneLabel) {
+    const grid = el('div.colorgrid');
+    const entry = UI.menu(anchor, [], { align: 'left' });
+    const node = entry.node;
+    if (noneLabel) node.appendChild(el('button.mi', { onclick: () => { entry.close(); onPick(null); } }, el('span.swatch.none' + (value == null ? '.sel' : ''), { style: { width: '1.2em', height: '1.2em' } }), el('span', noneLabel)));
+    for (const c of colors) grid.appendChild(el('button.swatch' + (String(value).toLowerCase() === c.toLowerCase() ? '.sel' : ''), { style: { background: c, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)' }, title: c, onclick: () => { entry.close(); onPick(c); } }));
+    node.appendChild(grid);
+    return entry;
+  },
+  /** A small button showing a number; tapping it lists the choices. */
+  numberMenu(label, options, value, onPick) {
+    const b = el('button.btn.small', label + ' ' + value);
+    b.onclick = () => UI.menu(b, options.map(o => ({ label: String(o), checked: o === value, onClick: () => onPick(o) })), { align: 'left' });
+    return b;
+  },
   toggle(on, onChange) {
     const b = el('button.switch' + (on ? '.on' : ''), { role: 'switch', 'aria-checked': String(!!on) });
     b.onclick = () => { on = !on; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); onChange(on); };

@@ -605,6 +605,25 @@ const Roadmap = {
     }
     return result;
   },
+  /** MilestoneRules.Check: an identical milestone on the line, or the milestones this edit would hide. */
+  check(edited, all, settings) {
+    const wrap = m => ({ m, s: startOfDay(parseWall(m.start)), e: startOfDay(parseWall(m.end)), id: m.id });
+    const level = Roadmap.levelOf(edited, settings);
+    const others = all.filter(m => m.id !== edited.id && Roadmap.levelOf(m, settings) === level).map(wrap);
+    const me = wrap(edited);
+    const identical = others.find(o => Roadmap.sameDates(o, me));
+    if (identical) return { identical: identical.m, hidden: [] };
+    const sort = l => l.slice().sort((a, b) => a.s - b.s || a.e - b.e);
+    const before = new Set(Roadmap.covered(sort(others)).map(x => x.id));
+    const after = Roadmap.covered(sort([...others, me]));
+    return { identical: null, hidden: after.filter(x => !before.has(x.id)).map(x => x.m) };
+  },
+  /** MilestoneRules.Hidden: every milestone hidden by others of its level. */
+  hidden(all, settings) {
+    const groups = new Map();
+    for (const m of all) { const l = Roadmap.levelOf(m, settings); if (!groups.has(l)) groups.set(l, []); groups.get(l).push({ m, s: startOfDay(parseWall(m.start)), e: startOfDay(parseWall(m.end)), id: m.id }); }
+    return [...groups.values()].flatMap(g => Roadmap.covered(g.sort((a, b) => a.s - b.s || a.e - b.e)).map(x => x.m));
+  },
   add(bar, from, to, fill) { if (to > from) bar.segments.push({ from, to, fill }); },
   barStart: b => b.segments.length ? new Date(Math.min(...b.segments.map(s => +s.from))) : null,
   barEnd: b => b.segments.length ? new Date(Math.max(...b.segments.map(s => +s.to))) : null,

@@ -40,6 +40,7 @@ const DocsView = {
     content.appendChild(el('div.docs',
       el('aside.tree.glass',
         el('div.tree-head', el('b', 'Documentation'),
+          this.graphBtn = el('button.btn.icon.small' + (this.graph ? '.primary' : ''), { title: 'Graph view', onclick: () => { this.graph = !this.graph; this.graphBtn.classList.toggle('primary', this.graph); this.renderTree(); this.renderDoc(); } }, icon('git-network-outline')),
           el('button.btn.icon.small', { title: 'New', onclick: e => this.newMenu(e.currentTarget, '') }, icon('add'))),
         this.treeBody),
       this.pane));
@@ -50,6 +51,7 @@ const DocsView = {
   newMenu(anchor, folder) {
     UI.menu(anchor, [
       { label: 'New document', icon: 'document-text-outline', onClick: () => this.createDoc(folder) },
+      { label: 'New rich text', icon: 'document-outline', onClick: () => this.createRich(folder) },
       { label: 'New folder', icon: 'folder-outline', onClick: () => this.createFolder(folder) }
     ]);
   },
@@ -105,6 +107,8 @@ const DocsView = {
 
   renderDoc() {
     this.revokeUrls();
+    this.graphCanvas?.destroy(); this.graphCanvas = null;
+    if (this.graph) { this.renderGraph(); return; }
     const node = this.node(this.current);
     if (!node) {
       fill(this.pane, UI.empty('book-outline', 'Documentation', 'Pick a document on the left, or create one.',
@@ -124,8 +128,8 @@ const DocsView = {
     } else if (node.kind === 'image') {
       body.appendChild(el('div.scroll', el('div.md', el('img', { src: this.blobUrl(full), alt: node.name }))));
     } else if (node.kind === 'rich') {
-      const { text } = this.p.text(full);
-      body.appendChild(el('div.scroll', el('div.md', el('p.small.muted', 'Rich text document — read-only here (edit it in the desktop app).'), el('div', { style: { whiteSpace: 'pre-wrap' } }, Docs.rtfToText(text)))));
+      head.append(el('span.chip', 'Rich text'), el('button.btn.icon.small', { onclick: e => this.itemMenu(e.currentTarget, node) }, icon('ellipsis-horizontal')));
+      RichEditor.mount(body, head, this.p, full);
     } else if (node.kind !== 'text') {
       body.appendChild(UI.empty('document-outline', node.name, `${this.p.bytes(full)?.length || 0} bytes — this kind of file is kept in the project but cannot be shown here.`));
     } else {
@@ -142,6 +146,35 @@ const DocsView = {
         body.appendChild(el('div.scroll', this.preview(node, text, enc)));
       }
     }
+  },
+
+  /** The graph of the documentation (DocsService.BuildGraph + GraphView): tap = select, double tap or Open = open. */
+  renderGraph() {
+    const model = GraphModel.fromDocs(this.p);
+    const host = el('div', { style: { position: 'absolute', inset: 0 } });
+    const info = el('div.graph-info.glass');
+    info.style.display = 'none';
+    const count = el('span.tiny.muted', `${model.nodes.filter(n => !n.ghost).length} documents · ${model.edges.length} links`);
+    fill(this.pane, el('div.doc-head', icon('git-network-outline'), el('h2', 'Graph'), count,
+      el('button.btn.small', { onclick: () => { this.graph = false; this.graphBtn.classList.remove('primary'); this.renderDoc(); } }, icon('close'), 'Close')),
+      el('div.doc-body', host, info));
+    if (!model.nodes.length) { host.appendChild(UI.empty('git-network-outline', 'No documents yet', 'Links between documents ([[wiki]] or markdown links) appear here.')); return; }
+    const open = n => {
+      if (n.ghost) { this.offerCreate(n.label, { path: '' }); return; }
+      const node = Docs.files(this.p).find(f => f.path === n.id);
+      if (node) { this.graph = false; this.graphBtn.classList.remove('primary'); this.go(node); }
+    };
+    this.graphCanvas = new GraphCanvas(host, model, {
+      colorOf: n => n.ghost ? '#8D8D8D' : groupColor(n.group),
+      onOpen: open,
+      onSelect: n => {
+        if (!n) { info.style.display = 'none'; return; }
+        info.style.display = '';
+        fill(info, el('b.ellipsis', n.label), el('span.tiny.muted', n.ghost ? 'does not exist yet' : `${n.degree} link${n.degree === 1 ? '' : 's'}${n.group ? ' · ' + n.group : ''}`),
+          el('button.btn.small.primary', { onclick: () => open(n) }, icon(n.ghost ? 'add' : 'open-outline'), n.ghost ? 'Create' : 'Open'));
+      }
+    });
+    if (this.current) requestAnimationFrame(() => this.graphCanvas?.select(this.current));
   },
 
   preview(node, text, enc) {
@@ -240,6 +273,17 @@ const DocsView = {
     this.p.setText(Docs.ROOT + path, `# ${Docs.titleOf(file)}\n\n`, 'utf8');
     this.open.add(folder);
     this.mode = 'edit';
+    this.go({ path, name: file });
+  },
+
+  /** DocsService.CreateRichDocument: an empty .rtf as WordPad or Word would create it. */
+  async createRich(folder) {
+    const name = await UI.prompt('New rich text document', 'Name', 'Untitled', v => Docs.validateName(v));
+    if (!name) return;
+    const file = Docs.uniqueName(this.p, folder, Docs.isRich(name) ? name : name + '.rtf');
+    const path = Docs.combine(folder, file);
+    this.p.setText(Docs.ROOT + path, '{\\rtf1\\ansi\\ansicpg1252\\deff0{\\fonttbl{\\f0\\fnil Segoe UI;}}\\pard\\f0\\fs24\\par}', 'utf8');
+    this.open.add(folder);
     this.go({ path, name: file });
   },
 

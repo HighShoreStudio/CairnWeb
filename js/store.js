@@ -243,7 +243,7 @@ class Project {
     if (v != null) this._json.set(path, v);
     return v;
   }
-  setJson(path, value) { this._json.set(path, value); this.touch(path); }
+  setJson(path, value) { this._json.set(path, value); if (!this.files.has(path)) this.files.set(path, new Uint8Array(0)); this.touch(path); }
   touch(path) { this.dirty.add(path); this.removed.delete(path); this.saveSoon(); this.emit(path); }
   text(path) { return decodeText(this.files.get(path)); }
   setText(path, text, enc = 'utf8') { this._json.delete(path); this.files.set(path, encodeText(text, enc)); this.touch(path); }

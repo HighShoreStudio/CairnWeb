@@ -80,7 +80,7 @@ a { color: var(--link); }
 #view { position: absolute; inset: 0; display: flex; flex-direction: column; }
 #layer { position: absolute; inset: 0; pointer-events: none; z-index: 50; }
 #layer > * { pointer-events: auto; }
-#toasts { position: absolute; left: 50%; bottom: 1em; transform: translateX(-50%); display: flex; flex-direction: column; gap: .4em; align-items: center; z-index: 90; pointer-events: none; }
+#toasts { position: absolute; left: 50%; top: 4.3em; transform: translateX(-50%); display: flex; flex-direction: column; gap: .4em; align-items: center; z-index: 90; pointer-events: none; }
 
 #rotate-hint { display: none; }
 @media (orientation: portrait) and (max-width: 820px) {
@@ -403,7 +403,8 @@ body.dragging, body.dragging * { cursor: grabbing !important; }
 /* ------------------------------------------------------------------ roadmap */
 .rm { position: absolute; inset: 0; display: flex; flex-direction: column; padding: .6em .7em .7em; gap: .55em; }
 .rm-bar { display: flex; align-items: center; gap: .4em; flex: none; }
-.rm-bar .lbl { font-weight: 700; min-width: 8em; text-align: center; }
+.rm-bar .rm-label { font-weight: 700; min-width: 8em; text-align: center; white-space: nowrap; }
+@container stage (max-width: 760px) { .rm-bar .btn .lbl { display: none; } .rm-bar .btn:has(.lbl) { width: 2.4em; padding: 0; } .rm-bar .rm-label { min-width: 6.5em; font-size: .9em; } }
 .rm-frame { flex: 1; min-height: 0; border-radius: 1.3em; overflow: hidden; display: flex; flex-direction: column; }
 .rm-scroll { flex: 1; min-height: 0; overflow: auto; position: relative; touch-action: pan-x pan-y; }
 .rm-grid { position: relative; }
@@ -433,3 +434,42 @@ body.dragging, body.dragging * { cursor: grabbing !important; }
 .card, .tn, .ptile, .acc { -webkit-touch-callout: none; }
 @container stage (max-width: 760px) { .topbar .right .btn .lbl { display: none; } .topbar .right .btn:has(.lbl) { width: 2.4em; padding: 0; } }
 .hidden { display: none !important; }
+
+/* ---------------------------------------------------------------- whiteboard editing */
+.wb-toolbar { position: absolute; left: .7em; bottom: .7em; display: flex; align-items: center; gap: .1em; padding: .3em; border-radius: 1.3em; z-index: 2; max-width: calc(100% - 13em); overflow-x: auto; scrollbar-width: none; }
+.wb-toolbar::-webkit-scrollbar { display: none; }
+.wb-stylebar { position: absolute; left: .7em; bottom: 4em; display: flex; align-items: center; gap: .35em; padding: .3em .4em; border-radius: 1.2em; z-index: 2; animation: rise .3s var(--spring); max-width: calc(100% - 1.4em); overflow-x: auto; }
+.vsep { width: 1px; align-self: stretch; margin: .2em .2em; background: var(--border); flex: none; }
+.wb-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .3em; }
+.wb-actions .btn { justify-content: flex-start; padding: 0 .6em; }
+.wb-actions .btn span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.wb-handle { fill: var(--surface); stroke: var(--selection); vector-effect: non-scaling-stroke; }
+.wb-handle.rot { fill: var(--selection); }
+.wb-sel.solid { stroke-dasharray: none; stroke-width: 3; }
+.wb-marquee { fill: color-mix(in srgb, var(--selection) 12%, transparent); stroke: var(--selection); stroke-width: 1.5; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+.wb-preview { opacity: .8; pointer-events: none; }
+.wb-mini { border-radius: .8em; background: color-mix(in srgb, var(--canvas) 80%, transparent); padding: .3em; }
+.graph-host { position: absolute; inset: 0; background: color-mix(in srgb, var(--canvas) 55%, transparent); }
+.colorgrid { display: grid; grid-template-columns: repeat(8, 1.7em); gap: .35em; padding: .4em .5em .5em; }
+.colorgrid .swatch { width: 1.7em; height: 1.7em; }
+.iconbox { width: 2.2em; height: 2.2em; border-radius: .6em; border: 0; padding: .35em; flex: none; cursor: pointer; }
+.icongrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.8em, 1fr)); gap: .35em; }
+.iconcell { aspect-ratio: 1; border: 1px solid transparent; border-radius: .7em; background: color-mix(in srgb, var(--chip) 70%, transparent); padding: .55em; cursor: pointer; color: var(--text); }
+.iconcell.sel { border-color: var(--primary); background: var(--primary-light); }
+.btn.lbl-hide .lbl { display: none; }
+.graph-info { position: absolute; left: .7em; bottom: .7em; right: .7em; max-width: 26em; display: flex; align-items: center; gap: .6em; padding: .5em .6em .5em .9em; border-radius: 1.1em; animation: rise .3s var(--spring); }
+.graph-info b { flex: 1; min-width: 0; }
+/* ---------------------------------------------------------------- rich text */
+.rich-toolbar { flex: none; display: flex; align-items: center; gap: .15em; padding: .3em .5em; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); overflow-x: auto; scrollbar-width: none; }
+.rich-toolbar::-webkit-scrollbar { display: none; }
+.rich-toolbar .btn.on { background: color-mix(in srgb, var(--primary) 22%, transparent); }
+.rich-toolbar b { font-size: 1em; }
+.rich-size { width: auto !important; min-height: 2em !important; padding: .1em 1.8em .1em .6em !important; font-size: 14px !important; background-position: calc(100% - .9em) .85em, calc(100% - .6em) .85em !important; }
+.doc-body { display: flex; flex-direction: column; }
+.rich-wrap { flex: 1; min-height: 0; padding: .8em; background: color-mix(in srgb, var(--canvas) 50%, transparent); }
+.rich-page { background: #fff; color: #111; max-width: 50em; margin: 0 auto; min-height: 100%; padding: 1.4em 1.8em; border-radius: .6em; box-shadow: 0 .3em 1.2em rgba(0,0,0,.12); font-family: "Segoe UI", -apple-system, system-ui, sans-serif; font-size: 12pt; line-height: 1.4; outline: none; -webkit-user-select: text; user-select: text; word-wrap: break-word; }
+.rich-page p { margin: 0 0 .1em; }
+.rich-page img { max-width: 100%; height: auto; }
+.rich-page a { color: #1F6F8B; }
+.rich-note { flex: none; display: flex; gap: .5em; align-items: center; padding: .5em 1em; font-size: .85em; color: var(--accent-text); background: color-mix(in srgb, var(--accent-light) 70%, transparent); }
+.doc-body > .scroll.rich-wrap { position: relative; inset: auto; }

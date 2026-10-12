@@ -79,12 +79,12 @@ const ProjectsView = {
       title: 'Phone ⇄ PC', cls: 'mid',
       body: el('div.col', { style: { gap: '.9em' } },
         el('div.label', 'From the PC to the phone'),
-        step('1', 'Compress the project folder', 'On the PC, right-click the project folder (the one with project.json) → Send to → Compressed (zipped) folder.'),
+        step('1', 'Export it from the desktop app', 'Cairn 1.4: select the project in the list → Export .zip… (or compress the project folder: Send to → Compressed folder).'),
         step('2', 'Import it here', 'Projects → Import, pick the zip. Sign in with the same account and password you use in the desktop app.'),
         el('div.label', 'From the phone to the PC'),
         step('1', 'Export the project', 'Project menu → Export .zip. On iPhone the share sheet opens: save it to Files, AirDrop it, or send it to yourself.'),
-        step('2', 'Extract it over the project folder', 'Extract the zip and copy its content over the project folder on the PC (or open the extracted folder with "Open Folder" in Cairn). Close the project in the desktop app first.'),
-        el('div.small.muted', 'Projects are stored only in this browser. Whiteboards and the roadmap are read-only here; every file the web version does not edit is kept exactly as it was.'))
+        step('2', 'Import it in the desktop app', 'Cairn 1.4: Import .zip… in the project list. Yes updates the project already on the PC (what it replaces is kept in backups/replaced-…), No imports a copy.'),
+        el('div.small.muted', 'Projects are stored only in this browser. Every file the web version does not edit is kept exactly as it was.'))
     });
   }
 };
