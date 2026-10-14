@@ -121,6 +121,8 @@ const BoardView = {
         el('div.col-foot', el('button.btn.ghost.small', { onclick: () => CardEditor.open(null, col.id) }, icon('add'), 'Add card')));
       if (bg) colEl.style.setProperty('--col-bg', bg);
       if (title) colEl.style.setProperty('--col-title', title);
+      colEl.style.width = ColumnWidth.css(ColumnWidth.get(col));
+      colEl.appendChild(ColumnWidth.grip(colEl, col));
       UI.longPress(colEl.querySelector('.col-head'), () => this.columnMenu(menuBtn, col));
       boardEl.appendChild(colEl);
       list.scrollTop = colScroll[col.id] || 0;
@@ -221,6 +223,64 @@ const BoardView = {
         const cards = col.cards; delete col.cards; col.cards = cards;
         App.ops.commit(); s.close(); this.render();
       } }, icon('checkmark'), 'Apply')] });
+  }
+};
+
+// ------------------------------------------------------------------ column width (same field as the desktop app)
+
+/** columns[].width of kanban.json, in desktop pixels: 300 by default (not written), 220–720.
+ *  On the web the default width is 16em, so every width scales with the text size of the screen. */
+const ColumnWidth = {
+  DEFAULT: 300, MIN: 220, MAX: 720, EM: 16,
+  get(col) {
+    const v = Number(col.width);
+    return col.width == null || !Number.isFinite(v) ? this.DEFAULT : Math.round(Math.min(this.MAX, Math.max(this.MIN, v)));
+  },
+  css(w) { return (this.EM * w / this.DEFAULT).toFixed(3) + 'em'; },
+  /** Writes the width (nothing at the default), keeping the property order of ColumnData: ..., width, cards. */
+  set(col, w) {
+    const cards = col.cards; delete col.cards; delete col.width;
+    if (w !== this.DEFAULT) col.width = w;
+    col.cards = cards;
+  },
+  grip(colEl, col) {
+    const g = el('div.col-resize', { title: 'Drag to change the width · double-click to reset' });
+    let lastTap = 0;
+    g.addEventListener('pointerdown', e => {
+      if (e.button > 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const now = Date.now();
+      if (now - lastTap < 350) { lastTap = 0; this.reset(col); return; }  // double click / double tap
+      lastTap = now;
+      const px = parseFloat(getComputedStyle(colEl).fontSize) || 14;
+      const scale = this.DEFAULT / (this.EM * px);  // desktop px per screen px
+      const x0 = e.clientX, w0 = this.get(col);
+      let w = w0, moved = false;
+      g.setPointerCapture(e.pointerId);
+      g.classList.add('on');
+      document.body.classList.add('col-resizing');
+      const move = ev => {
+        if (Math.abs(ev.clientX - x0) > 2) moved = true;
+        w = Math.round(Math.min(this.MAX, Math.max(this.MIN, w0 + (ev.clientX - x0) * scale)));
+        colEl.style.width = this.css(w);
+      };
+      const up = () => {
+        g.removeEventListener('pointermove', move); g.removeEventListener('pointerup', up); g.removeEventListener('pointercancel', up);
+        g.classList.remove('on');
+        document.body.classList.remove('col-resizing');
+        if (moved && w !== w0) { lastTap = 0; this.set(col, w); App.ops.commit(); }
+      };
+      g.addEventListener('pointermove', move); g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up);
+    });
+    g.addEventListener('click', e => e.stopPropagation());
+    return g;
+  },
+  reset(col) {
+    if (col.width == null) return;
+    this.set(col, this.DEFAULT);
+    App.ops.commit();
+    const colEl = BoardView.root?.querySelector(`.column[data-id="${col.id}"]`);
+    if (colEl) { colEl.style.transition = 'width .35s cubic-bezier(.34,1.56,.64,1)'; colEl.style.width = this.css(this.DEFAULT); setTimeout(() => colEl.style.transition = '', 400); }
   }
 };
 

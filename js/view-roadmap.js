@@ -23,7 +23,8 @@ const IonIcons = {
 };
 
 const RoadmapView = {
-  year: null, start: null, months: null, pid: null, collapsed: new Set(),
+  t0: null, span: null, pid: null, collapsed: new Set(),
+  DAY: 86400000, MIN_SPAN: 7, MAX_SPAN: 731,
 
   mount(content, right) {
     const p = App.project;
@@ -32,13 +33,14 @@ const RoadmapView = {
     this.data.milestones ||= []; this.data.items ||= []; this.data.tagOrder ||= []; this.data.collapsed ||= [];
     if (this.pid !== p.id) {
       this.pid = p.id;
-      this.months = Math.min(12, Math.max(1, this.data.months || 6));
+      this.span = Math.min(12, Math.max(1, this.data.months || 6)) * 30.44;
       this.collapsed = new Set(this.data.collapsed || []);
-      this.today();
+      this.t0 = this.todayStart();
     }
     this.label = el('span.rm-label');
-    const monthsSel = el('select.input', { style: { width: 'auto', minHeight: '2.2em', padding: '.2em 2em .2em .8em' }, onchange: () => { this.months = +monthsSel.value; if (this.start + this.months - 1 > 12) this.start = 13 - this.months; this.data.months = this.months; this.save(); this.render(); } },
-      [1, 2, 3, 4, 6, 9, 12].map(n => el('option', { value: n, selected: n === this.months }, n === 1 ? '1 month' : `${n} months`)));
+    this.monthsSel = el('select.input', { style: { width: 'auto', minHeight: '2.2em', padding: '.2em 2em .2em .8em' }, title: 'Time shown (pinch or mouse wheel to zoom)',
+      onchange: () => { this.zoomTo(+this.monthsSel.value * 30.44, null, true); } },
+      [1, 2, 3, 4, 6, 9, 12, 18, 24].map(n => el('option', { value: n }, n === 1 ? '1 month' : `${n} months`)));
     this.scroller = el('div.rm-scroll.scroll');
     const frame = el('div.rm-frame.glass', this.scroller);
     this.legend = el('div.rm-legend',
@@ -46,29 +48,21 @@ const RoadmapView = {
       el('span', el('i', { style: { background: 'color-mix(in srgb, var(--primary) 34%, var(--surface))' } }), 'time left / saved'),
       el('span', el('i', { style: { background: 'repeating-linear-gradient(45deg, var(--primary) 0 3px, color-mix(in srgb, var(--primary) 34%, var(--surface)) 3px 6px)' } }), 'delay'),
       el('span', el('i', { style: { background: 'color-mix(in srgb, var(--primary) 34%, var(--surface))', border: '1.5px solid var(--primary)' } }), 'start → finish'),
-      el('span.muted', 'Tap a bar to edit it · tap an empty spot to add a milestone or a task'));
+      el('span.muted', matchMedia('(pointer: coarse)').matches
+        ? 'Drag to move in time · pinch to zoom · tap a bar to edit it, an empty spot to add'
+        : 'Wheel to zoom · drag (wheel button or left) to move in time · Shift+wheel scrolls the rows · click a bar to edit it'));
     content.appendChild(el('div.rm',
       el('div.rm-bar',
-        el('button.btn.icon', { title: 'Previous month', onclick: () => { this.prev(); this.render(); } }, icon('chevron-back')),
         this.label,
-        el('button.btn.icon', { title: 'Next month', onclick: () => { this.next(); this.render(); } }, icon('chevron-forward')),
-        el('button.btn', { onclick: () => { this.today(); this.render(); } }, icon('today-outline'), 'Today'),
+        el('button.btn', { onclick: () => this.goToday() }, icon('today-outline'), 'Today'),
         el('div.grow'),
         el('button.btn', { onclick: () => this.editMilestone(null, this.defaultDate()) }, icon('flag-outline'), el('span.lbl', 'Milestone')),
         el('button.btn', { onclick: () => this.editItem(null, this.defaultDate()) }, icon('add'), el('span.lbl', p.info.settings.roadmap.customName || 'Custom')),
-        monthsSel,
+        this.monthsSel,
         el('button.btn.icon', { title: 'Roadmap settings', onclick: () => RoadmapSettingsSheet.open() }, icon('settings-outline'))),
       frame, this.legend));
     if (p.roadmapError) UI.toast('roadmap.json cannot be read: showing the tasks only.', 'warning-outline', 4000);
-    // Swipe on the timeline: one month per swipe.
-    let sx = null, sy = 0;
-    this.scroller.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') { sx = e.clientX; sy = e.clientY; } });
-    this.scroller.addEventListener('pointerup', e => {
-      if (sx == null) return;
-      const dx = e.clientX - sx, dy = e.clientY - sy; sx = null;
-      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) { dx < 0 ? this.next() : this.prev(); this.render(dx < 0 ? 1 : -1); }
-    });
-    this.scroller.addEventListener('pointercancel', () => sx = null);
+    this.bindGestures();
     this.ro = new ResizeObserver(() => this.render());
     this.ro.observe(this.scroller);
   },
@@ -85,36 +79,150 @@ const RoadmapView = {
     if (!this.p.roadmap) this.p.roadmap = this.data;
     this.p.setJson('roadmap.json', this.data);
   },
+  /** The months of the desktop toolbar (1–12): the nearest to the time shown, kept in roadmap.json. */
+  get months() { return Math.min(12, Math.max(1, Math.round(this.span / 30.44))); },
   /** New items start today when today is on screen, otherwise at the start of the visible period. */
-  defaultDate() { const t = startOfDay(new Date()); return t >= this.from && t < this.to ? t : this.from; },
-  today() { const t = new Date(); this.year = t.getFullYear(); this.start = Math.min(t.getMonth() + 1, 13 - this.months); },
-  next() { if (this.start + this.months - 1 >= 12) { this.year++; this.start = 1; } else this.start++; },
-  prev() { if (this.start <= 1) { this.year--; this.start = 13 - this.months; } else this.start--; },
-  get from() { return new Date(this.year, this.start - 1, 1); },
-  get to() { return new Date(this.year, this.start - 1 + this.months, 1); },
+  defaultDate() { const t = startOfDay(new Date()); return t >= this.from && t < this.to ? t : startOfDay(this.from); },
+  get from() { return new Date(this.t0); },
+  get to() { return new Date(this.t0 + this.span * this.DAY); },
 
-  async render(direction = 0) {
+  // ------------------------------------------------------------------ free scrolling and zoom
+  /** Where "Today" puts the timeline: from the first of the month, or with today in the middle when zoomed in. */
+  todayStart() {
+    const now = Date.now(), t = new Date();
+    return Math.max(+new Date(t.getFullYear(), t.getMonth(), 1), now - this.span * this.DAY * .5);
+  },
+  goToday() { this.animateTo(this.todayStart(), this.span); },
+  animateTo(t0, span) {
+    cancelAnimationFrame(this.anim);
+    const a0 = this.t0, s0 = this.span, start = performance.now(), dur = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 420;
+    const step = now => {
+      const k = Math.min(1, (now - start) / dur), e = 1 - Math.pow(1 - k, 3);
+      this.t0 = a0 + (t0 - a0) * e; this.span = s0 + (span - s0) * e;
+      this.render();
+      if (k < 1) this.anim = requestAnimationFrame(step); else this.zoomed();
+    };
+    this.anim = requestAnimationFrame(step);
+  },
+  headWidth(fs, W) { return Math.round(fs * (W < fs * 34 ? 6.6 : 9.5)); },
+  plot() { const fs = parseFloat(getComputedStyle(this.scroller).fontSize) || 14, headW = this.headWidth(fs, this.scroller.clientWidth); return { headW, plotW: Math.max(50, this.scroller.clientWidth - headW), left: this.scroller.getBoundingClientRect().left }; },
+  /** Time under a screen x. */
+  timeAt(clientX) { const { headW, plotW, left } = this.plot(); return this.t0 + (clientX - left - headW) / plotW * this.span * this.DAY; },
+  /** Zoom keeping the moment under clientX in place (null = the middle of the timeline). */
+  zoomTo(span, clientX, animate = false) {
+    span = Math.min(this.MAX_SPAN, Math.max(this.MIN_SPAN, span));
+    const { headW, plotW, left } = this.plot();
+    const x = clientX == null ? left + headW + plotW / 2 : clientX;
+    const at = this.timeAt(x), frac = (x - left - headW) / plotW;
+    const t0 = at - frac * span * this.DAY;
+    if (animate) { this.animateTo(t0, span); return; }
+    this.t0 = t0; this.span = span;
+    this.queue(); this.zoomed();
+  },
+  panBy(dxPx) { const { plotW } = this.plot(); this.t0 -= dxPx / plotW * this.span * this.DAY; this.queue(); },
+  queue() { if (this.pending) return; this.pending = requestAnimationFrame(() => { this.pending = 0; this.render(); }); },
+  /** After a zoom: the months menu shows the nearest choice, roadmap.json keeps the months for the desktop app. */
+  zoomed() {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => { if (this.data.months !== this.months) this.save(); }, 600);
+  },
+
+  bindGestures() {
+    const sc = this.scroller, pts = new Map();
+    let mode = null, last = null, down = null, pinch = null, moved = false, vel = 0, lastT = 0;
+    const mid = () => { const [a, b] = [...pts.values()]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) || 1 }; };
+    sc.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
+      if (e.button === 1) e.preventDefault();   // no browser autoscroll with the wheel button
+      cancelAnimationFrame(this.anim); cancelAnimationFrame(this.glide);
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      sc.setPointerCapture?.(e.pointerId);
+      if (pts.size === 1) { mode = 'pan'; last = down = { x: e.clientX, y: e.clientY }; moved = false; vel = 0; lastT = performance.now(); }
+      else if (pts.size === 2) { mode = 'pinch'; const m = mid(); pinch = { d: m.d, span: this.span, at: this.timeAt(m.x), y: m.y }; moved = true; }
+    });
+    sc.addEventListener('pointermove', e => {
+      if (!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (mode === 'pan' && pts.size === 1) {
+        const dx = e.clientX - last.x, dy = e.clientY - last.y;
+        if (!moved && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) return;
+        moved = true; sc.classList.add('panning');
+        const now = performance.now();
+        vel = dx / Math.max(1, now - lastT); lastT = now;
+        this.panBy(dx);
+        sc.scrollTop -= dy;
+        last = { x: e.clientX, y: e.clientY };
+      } else if (mode === 'pinch' && pts.size >= 2) {
+        const m = mid();
+        const span = Math.min(this.MAX_SPAN, Math.max(this.MIN_SPAN, pinch.span * pinch.d / m.d));
+        const { headW, plotW, left } = this.plot();
+        this.span = span;
+        this.t0 = pinch.at - (m.x - left - headW) / plotW * span * this.DAY;   // the moment under the fingers stays under them
+        sc.scrollTop -= m.y - pinch.y; pinch.y = m.y;
+        this.queue();
+      }
+    });
+    const end = e => {
+      if (!pts.has(e.pointerId)) return;
+      pts.delete(e.pointerId);
+      if (mode === 'pinch') { this.zoomed(); if (pts.size === 1) { mode = 'pan'; last = [...pts.values()][0]; vel = 0; } else mode = null; return; }
+      sc.classList.remove('panning');
+      mode = null;
+      if (moved) {
+        this.justPanned = true; setTimeout(() => this.justPanned = false, 60);
+        // a flick keeps the timeline moving for a moment
+        if (e.pointerType !== 'mouse' && Math.abs(vel) > .25 && performance.now() - lastT < 80) {
+          let v = vel * 16;
+          const glide = () => { v *= .93; if (Math.abs(v) < .4) return; this.panBy(v); this.glide = requestAnimationFrame(glide); };
+          this.glide = requestAnimationFrame(glide);
+        }
+      }
+    };
+    sc.addEventListener('pointerup', end);
+    sc.addEventListener('pointercancel', end);
+    // a drag is not a click on a bar or on an empty spot
+    sc.addEventListener('click', e => { if (this.justPanned) { e.stopPropagation(); e.preventDefault(); } }, true);
+    sc.addEventListener('auxclick', e => e.preventDefault());
+    sc.addEventListener('wheel', e => {
+      e.preventDefault();
+      cancelAnimationFrame(this.anim); cancelAnimationFrame(this.glide);
+      const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+      const dx = e.deltaX * k, dy = e.deltaY * k;
+      if (e.shiftKey && !e.ctrlKey) { sc.scrollTop += dy || dx; return; }
+      if (!e.ctrlKey && Math.abs(dx) > Math.abs(dy)) { this.panBy(-dx); return; }   // touchpad: two fingers sideways
+      this.zoomTo(this.span * Math.exp(dy * (e.ctrlKey ? .01 : .0012)), e.clientX);
+    }, { passive: false });
+  },
+
+  render() {
     if (!this.scroller || !document.contains(this.scroller)) { this.ro?.disconnect(); return; }
     const p = this.p, settings = p.info.settings.roadmap;
-    const from = this.from, to = this.to;
-    this.label.textContent = this.months === 1 ? `${MONTHS_LONG[from.getMonth()]} ${this.year}` : `${MONTHS[from.getMonth()]} – ${MONTHS[addDays(to, -1).getMonth()]} ${this.year}`;
+    const from = this.from, to = this.to, last = new Date(+to - 1);
+    this.label.textContent = from.getMonth() === last.getMonth() && from.getFullYear() === last.getFullYear()
+      ? `${MONTHS_LONG[from.getMonth()]} ${from.getFullYear()}`
+      : `${MONTHS[from.getMonth()]} ${from.getFullYear()} – ${MONTHS[last.getMonth()]} ${last.getFullYear()}`;
+    const choices = [...this.monthsSel.options].map(o => +o.value);
+    const nearest = choices.reduce((a, b) => Math.abs(b * 30.44 - this.span) < Math.abs(a * 30.44 - this.span) ? b : a);
+    if (+this.monthsSel.value !== nearest) this.monthsSel.value = String(nearest);
     const rows = Roadmap.build(p.board, this.data, settings, new Date());
     for (const r of rows) r.collapsed = this.collapsed.has(r.key);
     const fs = parseFloat(getComputedStyle(this.scroller).fontSize) || 14;
-    const W = this.scroller.clientWidth, headW = Math.round(fs * 9.5), timeH = Math.round(fs * 3), laneH = Math.round(fs * 2.15), barH = Math.round(fs * 1.55), collapsedH = Math.round(fs * 1.9);
+    const W = this.scroller.clientWidth, headW = this.headWidth(fs, W), timeH = Math.round(fs * 3), laneH = Math.round(fs * 2.15), barH = Math.round(fs * 1.55), collapsedH = Math.round(fs * 1.9);
     const plotW = Math.max(50, W - headW);
-    const days = (to - from) / 86400000;
+    const days = this.span;
     const X = d => headW + ((d - from) / 86400000) / days * plotW;
     const dark = UI.isDark();
     const css = getComputedStyle(document.documentElement);
     const surface = css.getPropertyValue('--surface').trim() || '#fff';
     const textC = css.getPropertyValue('--text').trim(), muted = css.getPropertyValue('--muted').trim(), border = css.getPropertyValue('--border').trim();
 
-    // icons of the milestone types
-    const iconNames = new Set();
-    for (const r of rows) for (const l of r.lanes) for (const b of l) if (b.icon?.startsWith('ion:')) iconNames.add(b.icon.slice(4));
-    const icons = new Map();
-    await Promise.all([...iconNames].map(async n => icons.set(n, await IonIcons.get(n))));
+    // icons of the milestone types (loaded once, then drawn on the next frame)
+    const icons = new Map(); let missing = false;
+    for (const r of rows) for (const l of r.lanes) for (const b of l) if (b.icon?.startsWith('ion:')) {
+      const n = b.icon.slice(4);
+      if (IonIcons.cache.has(n)) icons.set(n, IonIcons.cache.get(n)); else { missing = true; IonIcons.get(n).then(() => this.queue()); }
+    }
+    void missing;
 
     let y = timeH;
     const layout = rows.map(r => { const h = r.collapsed ? collapsedH : Math.max(1, r.lanes.length) * laneH + 6; const o = { r, y, h }; y += h + 4; return o; });
@@ -139,7 +247,7 @@ const RoadmapView = {
       return patterns.get(key);
     };
 
-    // row backgrounds + month grid
+    // row backgrounds
     layout.forEach((o, i) => {
       const bg = svgEl('rect', { x: 0, y: o.y - 2, width: W, height: o.h + 4, fill: i % 2 ? 'rgba(0,0,0,0)' : (dark ? 'rgba(255,255,255,.025)' : 'rgba(22,50,79,.03)') });
       bg.addEventListener('click', ev => {
@@ -150,23 +258,35 @@ const RoadmapView = {
       });
       svg.appendChild(bg);
     });
-    for (let m = 0; m <= this.months; m++) {
-      const d = new Date(this.year, this.start - 1 + m, 1), x = X(d);
-      svg.appendChild(svgEl('line', { x1: x, x2: x, y1: 0, y2: H, stroke: border, 'stroke-width': 1 }));
-      if (m < this.months) {
-        const next = new Date(this.year, this.start + m, 1);
-        const w = X(next) - x;
-        svg.appendChild(svgEl('text', { x: x + 6, y: fs * 1.25, fill: textC, 'font-size': fs * .9, 'font-weight': 700 }, w > fs * 6 ? MONTHS_LONG[d.getMonth()] : MONTHS[d.getMonth()]));
-      }
-    }
-    // weeks (or days when there is room)
+    // months: a line at every first of the month, the name (and the year in January / at the left edge) when there is room
     const pxDay = plotW / days;
-    if (pxDay * 7 > fs * 1.8) {
-      let d = new Date(from); d = addDays(d, (8 - d.getDay()) % 7); // Mondays
+    for (let d = new Date(from.getFullYear(), from.getMonth(), 1); d < to; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+      const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      const x = X(d), xe = X(next);
+      if (d >= from) svg.appendChild(svgEl('line', { x1: x, x2: x, y1: 0, y2: H, stroke: border, 'stroke-width': d.getMonth() === 0 ? 2 : 1 }));
+      const tx = Math.max(x, headW) + 6, room = xe - tx - 4;
+      if (room < fs * 1.6) continue;
+      const year = d.getMonth() === 0 || x < headW;
+      const longName = MONTHS_LONG[d.getMonth()], shortName = MONTHS[d.getMonth()];
+      const label = room > fs * (year ? 9 : 6) ? longName + (year ? ` ${d.getFullYear()}` : '')
+        : room > fs * (year ? 5 : 2.6) ? shortName + (year ? ` ${String(d.getFullYear()).slice(year && room < fs * 6 ? 2 : 0)}` : '')
+        : year && room > fs * 2.4 ? String(d.getFullYear()) : shortName.slice(0, 1);
+      svg.appendChild(svgEl('text', { x: tx, y: fs * 1.25, fill: textC, 'font-size': fs * .9, 'font-weight': 700 }, label));
+    }
+    // weeks, or days when zoomed in
+    if (pxDay > fs * 1.7) {
+      for (let d = startOfDay(from); d < to; d = addDays(d, 1)) {
+        const x = X(d); if (x < headW) continue;
+        const monday = d.getDay() === 1;
+        svg.appendChild(svgEl('line', { x1: x, x2: x, y1: timeH - fs * .7, y2: H, stroke: border, 'stroke-width': monday ? .8 : .4, 'stroke-dasharray': monday ? '2 4' : '1 5' }));
+        svg.appendChild(svgEl('text', { x: x + 3, y: timeH - fs * .45, fill: muted, 'font-size': fs * .68, 'font-weight': monday ? 700 : 400 }, monday && settings.showWeekNumber && pxDay > fs * 3.2 ? `${d.getDate()} · ${isoWeek(d)}w` : String(d.getDate())));
+      }
+    } else if (pxDay * 7 > fs * 1.8) {
+      let d = startOfDay(from); d = addDays(d, (8 - d.getDay()) % 7); // Mondays
       for (; d < to; d = addDays(d, 7)) {
         const x = X(d);
         svg.appendChild(svgEl('line', { x1: x, x2: x, y1: timeH - fs * .7, y2: H, stroke: border, 'stroke-width': .5, 'stroke-dasharray': '2 4' }));
-        if (pxDay * 7 > fs * 2.4) svg.appendChild(svgEl('text', { x: x + 3, y: timeH - fs * .45, fill: muted, 'font-size': fs * .68 }, settings.showWeekNumber ? `${d.getDate()} · ${isoWeek(d)}w` : String(d.getDate())));
+        if (pxDay * 7 > fs * 2.4) svg.appendChild(svgEl('text', { x: x + 3, y: timeH - fs * .45, fill: muted, 'font-size': fs * .68 }, settings.showWeekNumber && pxDay * 7 > fs * 4.6 ? `${d.getDate()} · ${isoWeek(d)}w` : String(d.getDate())));
       }
     }
     svg.appendChild(svgEl('line', { x1: headW, x2: W, y1: timeH, y2: timeH, stroke: border }));
@@ -228,19 +348,21 @@ const RoadmapView = {
     const headBg = svgEl('rect', { x: 0, y: 0, width: headW, height: H, fill: dark ? 'rgba(15,23,32,.55)' : 'rgba(255,255,255,.55)' });
     svg.appendChild(headBg);
     svg.appendChild(svgEl('line', { x1: headW, x2: headW, y1: 0, y2: H, stroke: border }));
+    const maxChars = Math.max(4, Math.floor((headW - 18 - fs * 1.6) / (fs * .82 * .56)));
     for (const o of layout) {
       const count = o.r.lanes.reduce((n, l) => n + l.length, 0);
       const g = svgEl('g', { style: 'cursor:pointer' });
       g.appendChild(svgEl('rect', { x: 0, y: o.y - 2, width: headW, height: o.h + 4, fill: 'transparent' }));
       g.appendChild(svgEl('rect', { x: 8, y: o.y + 6, width: 4, height: Math.max(8, Math.min(o.h - 12, laneH - 10)), rx: 2, fill: cssColor(o.r.color, '#888') }));
-      const t = svgEl('text', { x: 18, y: o.y + 6 + fs * .7, fill: textC, 'font-size': fs * .82, 'font-weight': 650 }, o.r.title.length > 14 ? o.r.title.slice(0, 13) + '…' : o.r.title);
+      const t = svgEl('text', { x: 18, y: o.y + 6 + fs * .7, fill: textC, 'font-size': fs * .82, 'font-weight': 650 }, o.r.title.length > maxChars ? o.r.title.slice(0, maxChars - 1) + '…' : o.r.title);
       g.appendChild(t);
       g.appendChild(svgEl('text', { x: headW - 8, y: o.y + 6 + fs * .7, fill: muted, 'font-size': fs * .7, 'text-anchor': 'end' }, o.r.collapsed ? `▸ ${count}` : String(count)));
       g.addEventListener('click', ev => this.rowMenu(ev, o.r, rows));
       svg.appendChild(g);
     }
+    const top = this.scroller.scrollTop;
     fill(this.scroller, svg);
-    if (direction) svg.animate([{ opacity: .3, transform: `translateX(${direction * 30}px)` }, { opacity: 1, transform: 'none' }], { duration: 300, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    this.scroller.scrollTop = top;
     if (!rows.some(r => r.lanes.length)) this.scroller.appendChild(el('div.small.muted', { style: { position: 'absolute', left: headW + 16 + 'px', top: timeH + 16 + 'px', maxWidth: '24em' } },
       'Nothing to show yet. A task appears with a Start date plus an End or a Finish date (or a Due date while it is in progress); milestones are created in the desktop app.'));
   },

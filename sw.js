@@ -1,5 +1,5 @@
 /* Cairn Web — offline cache. Bump VERSION when publishing a new build. */
-const VERSION = 'cairn-web-1.4.0';
+const VERSION = 'cairn-web-1.5.0';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'vendor/jszip.min.js', 'vendor/marked.min.js', 'vendor/purify.min.js',
   'js/icons.js', 'js/util.js', 'js/store.js', 'js/model.js', 'js/ui.js', 'js/graph.js', 'js/rtf.js', 'js/view-auth.js', 'js/view-projects.js',

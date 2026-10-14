@@ -2,7 +2,7 @@
 'use strict';
 
 const App = {
-  version: '1.3-web',
+  version: '1.5-web',
   project: null,     // Project (store.js)
   ops: null,         // BoardOps (model.js)
   tab: 'board',

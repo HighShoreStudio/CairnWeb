@@ -16,27 +16,19 @@
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-  <!-- Animated background: fills the whole screen, also outside the 16:9 safe area. -->
+  <!-- Animated background: fills the whole screen. -->
   <div id="backdrop" aria-hidden="true">
     <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div>
     <div class="grain"></div>
   </div>
 
-  <!-- Everything interactive lives inside the stage: always 16:9, always inside the safe area. -->
+  <!-- Everything interactive lives inside the stage: the whole screen, landscape or portrait. -->
   <div id="stage-wrap">
     <main id="stage">
       <div id="view"></div>
       <div id="layer"></div>
       <div id="toasts" aria-live="polite"></div>
     </main>
-  </div>
-
-  <div id="rotate-hint" aria-hidden="true">
-    <div class="rotate-card glass">
-      <div class="rotate-icon"></div>
-      <b>Turn your phone sideways</b>
-      <span>Cairn is laid out for landscape.</span>
-    </div>
   </div>
 
   <noscript><p style="padding:2rem;color:#fff">Cairn needs JavaScript.</p></noscript>
